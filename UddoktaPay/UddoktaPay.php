@@ -69,26 +69,20 @@ class UddoktaPay extends Gateway
     {
         $product = $this->getProduct($invoice);
 
-        $response = $this->request('/checkout/payment/create', [
+        $response = $this->request('/checkout-v2', [
             'amount' => number_format($total, 2, '.', ''),
             'currency' => $invoice->currency_code,
+            'full_name' => $invoice->user->name,
+            'email' => $invoice->user->email,
             'metadata' => [
                 'invoice_id' => $invoice->id,
             ],
-            'customer' => [
-                'name' => $invoice->user->name,
-                'email' => $invoice->user->email,
-            ],
-            'product' => [
-                'name' => $product->name ?? 'None',
-                'description' => 'Invoice #' . $invoice->id,
-            ],
-            'success_url' => route('invoices.show', $invoice) . '?checkPayment=true',
+            'redirect_url' => route('invoices.show', $invoice) . '?checkPayment=true',
             'cancel_url' => route('invoices.show', $invoice),
-            'ipn_url' => route('extensions.gateways.uddoktapay.webhook', $invoice),
+            'webhook_url' => route('extensions.gateways.uddoktapay.webhook', $invoice),
         ]);
 
-        return $response['paymentURL'];
+        return $response['payment_url'];
     }
 
     private function getProduct(Invoice $invoice): ?Product
@@ -109,12 +103,12 @@ class UddoktaPay extends Gateway
 
     public function webhook(Request $request)
     {
-        $payment = $this->request('/checkout/payment/verify', [
-            'paymentID' => $request->input('paymentID'),
+        $payment = $this->request('/verify-payment', [
+            'invoice_id' => $request->input('invoice_id'),
         ]);
 
-        if ($payment['status'] == 'completed') {
-            ExtensionHelper::addPayment($payment['metadata']['invoice_id'], 'UddoktaPay', $payment['amount'], $payment['fee'], $payment['transactionID']);
+        if (strtolower($payment['status']) === strtolower('COMPLETED')) {
+            ExtensionHelper::addPayment($payment['metadata']['invoice_id'], 'UddoktaPay', $payment['amount'], $payment['fee'], $payment['transaction_id']);
         }
     }
 }
